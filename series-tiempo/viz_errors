@@ -1,0 +1,102 @@
+# package -----------------------------------------------------------------
+rm(list = ls())
+library(tidyverse)
+library(viridis)
+theme_set(theme_minimal())
+
+# data --------------------------------------------------------------------
+n <- 19630
+
+
+t <- seq(1:n)
+y <- sqrt(t) + rnorm(t) * log(1 + t) 
+
+df <- data_frame(t, y)
+
+ggplot(df) + geom_line(aes(t, y))
+
+df <- df %>% 
+  mutate(
+    mod_n = y + rnorm(n),
+    mod_e = y + rexp(n) - 1,
+    mod_a = y + as.vector(arima.sim(model = list(ar = .9), n = n, innov = rnorm(n, sd = sqrt(1 - 0.9*0.9)))),
+    mod_f = y + 1,
+    mod_u = y +  runif(n, -sqrt(3), sqrt(3))
+  )
+
+
+# comparacion -------------------------------------------------------------
+dfg <- df %>% 
+  gather(mod, valor, -t, -y)
+dfg
+
+ggplot(dfg) +
+  geom_line(aes(t, valor, color = mod)) +
+  scale_color_viridis(discrete = TRUE) +
+  facet_wrap(~ mod) + 
+  ggtitle("KHEEEEE!")
+
+ggplot(dfg %>% filter(t <= 50)) +
+  geom_line(aes(t, valor, color = mod)) +
+  geom_line(aes(t, y), alpha = 0.5) + 
+  scale_color_viridis(discrete = TRUE) +
+  facet_wrap(~ mod)
+
+dfg <- dfg %>% 
+  mutate(error = y - valor)
+
+
+ggplot(dfg %>% filter(t <= 250)) +
+  geom_line(aes(t, error, color = mod), size = 0.1) +
+  scale_color_viridis(discrete = TRUE) +
+  facet_wrap(~ mod)
+
+
+ggplot(dfg) +
+  geom_histogram(aes(error, fill = mod), size = 0.1) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_wrap(~ mod)
+
+ggplot(dfg) +
+  geom_histogram(aes(error, fill = mod), size = 0.1) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_wrap(~ mod, scales = "free")
+
+dfg %>% 
+  group_by(mod) %>% 
+  summarise(
+    mean(error),
+    var(error),
+    median(error),
+    li = quantile(error, 0.1),
+    ls = quantile(error, 0.9)
+  ) %>% 
+  mutate(
+    l = ls - li
+  ) %>% 
+  mutate_if(is.numeric, round, 2)
+
+library(forecast)
+
+accuracy
+
+
+
+dfacc <- dfg %>% 
+  group_by(mod) %>% 
+  summarise(
+    median = median(error),
+    acf1 = acf(error, plot = FALSE)$acf[1 + 1],
+    acc = list(accuracy(y, valor))
+    ) %>% 
+  mutate(acc = map(acc, as_data_frame)) %>% 
+  unnest()
+
+dfaccg <- dfacc %>% 
+  gather(tipo, valor, -mod)
+
+ggplot(dfaccg) +
+  geom_point(aes(mod, valor, color = mod)) +
+  geom_segment(aes(x = mod, xend = mod, y = 0, yend = valor, color = mod)) +
+  scale_color_viridis(discrete = TRUE) + 
+  facet_wrap(~tipo)
